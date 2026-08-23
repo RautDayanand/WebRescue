@@ -94,7 +94,13 @@ export function validateScrapedDataset(
 
   // 1. Calculate Field Completeness Ratios
   requiredFields.forEach((field) => {
-    const nonNullCount = dataset.filter((item) => item[field] !== undefined && item[field] !== null && item[field] !== '').length;
+    const nonNullCount = dataset.filter((item) => {
+      const val = item[field];
+      if (val === undefined || val === null || val === '' || val === 'N/A' || val === '₹N/A') return false;
+      if (typeof val === 'string' && (val.trim().toLowerCase() === 'n/a' || val.trim().toLowerCase() === '₹n/a')) return false;
+      if (typeof val === 'number' && isNaN(val)) return false;
+      return true;
+    }).length;
     fieldCompleteness[field] = parseFloat((nonNullCount / totalRecords).toFixed(2));
   });
 

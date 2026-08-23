@@ -90,7 +90,10 @@ export function formulateRepairPrompt(validationReport?: ValidationResult, custo
     return `[${err.type}] Field "${err.field}": ${err.message}`;
   });
 
-  return `Scraper extraction failure detected: ${errorSummaries.join('; ')}. Website structure or DOM selectors moved. Repair extraction logic while maintaining schema fields.`;
+  const fullPrompt = `Scraper extraction failure detected: ${errorSummaries.join('; ')}. Website structure or DOM selectors moved. Repair extraction logic while maintaining schema fields.`;
+
+  // Safely truncate to 750 characters max to guarantee API limit compliance
+  return fullPrompt.length > 750 ? fullPrompt.slice(0, 747) + '...' : fullPrompt;
 }
 
 /**

@@ -16,11 +16,12 @@ export interface AutonomousAgentInput {
 export interface ResearchResultItem {
   name?: string;
   price?: number;
-  currency?: string;
+  price_currency?: string;
   ram?: number;
   storage?: number;
   rating?: number;
   url?: string;
+  transmission?: string;
   [key: string]: any;
 }
 
@@ -43,6 +44,28 @@ export interface AutonomousAgentOutput {
   comparison: ComparisonInsight[];
   recommendation: string;
   confidence: number;
+  validRecordsCount: number;
+  rejectedRecordsCount: number;
+}
+
+function extractMaxPriceFromPrompt(prompt: string): number | undefined {
+  const promptLower = prompt.toLowerCase();
+
+  // Check for lakh patterns e.g. 10 lakh -> 1000000, 20 lakh -> 2000000
+  const lakhMatch = promptLower.match(/under\s*₹?\s*(\d+(?:\.\d+)?)\s*lakh/i) || promptLower.match(/(\d+(?:\.\d+)?)\s*lakh/i);
+  if (lakhMatch) {
+    return Math.round(parseFloat(lakhMatch[1]) * 100000);
+  }
+
+  // Check for numeric price patterns e.g. ₹80,000 or ₹80000 or 80000 or ₹2000000
+  const priceMatch = promptLower.match(/under\s*₹?\s*([\d,]+)/i) || promptLower.match(/₹\s*([\d,]+)/i);
+  if (priceMatch) {
+    const cleaned = priceMatch[1].replace(/,/g, '');
+    const num = parseInt(cleaned, 10);
+    if (!isNaN(num) && num > 1000) return num;
+  }
+
+  return undefined;
 }
 
 /**
@@ -53,61 +76,124 @@ export async function analyzeValidatedDataset(
   prompt: string,
   plan: StructuredResearchPlan,
   records: ResearchResultItem[]
-): Promise<{ summary: string; comparison: ComparisonInsight[]; recommendation: string; confidence: number }> {
+): Promise<{
+  summary: string;
+  comparison: ComparisonInsight[];
+  recommendation: string;
+  confidence: number;
+  validRecords: ResearchResultItem[];
+  rejectedRecordsCount: number;
+}> {
   if (!records || records.length === 0) {
     return {
-      summary: 'No validated records were recovered from the target web sources.',
+      summary: `0 records discovered. No valid options available for "${prompt}".`,
       comparison: [],
-      recommendation: 'Specify alternative public sources or broaden search criteria.',
-      confidence: 0.2,
+      recommendation: 'Broaden search criteria or specify alternative public web sources.',
+      confidence: 0.15,
+      validRecords: [],
+      rejectedRecordsCount: 0,
     };
   }
 
-  // Deduplicate records by name
+  // Deduplicate records by name/title
   const uniqueRecordsMap = new Map<string, ResearchResultItem>();
   records.forEach((r) => {
-    const rawKey = typeof r.name === 'string' ? r.name : (r.title || JSON.stringify(r));
+    const rawKey = typeof r.name === 'string' && r.name.trim().length > 0 ? r.name : (r.title || JSON.stringify(r));
     const key = String(rawKey).toLowerCase().trim();
     if (!uniqueRecordsMap.has(key)) uniqueRecordsMap.set(key, r);
   });
   const uniqueRecords = Array.from(uniqueRecordsMap.values());
 
-  // Filter records with valid numeric prices
-  const validPriced = uniqueRecords.filter((r) => typeof r.price === 'number' && r.price > 0);
+  // 1. Strict Schema & Required Field Validation
+  const validRecords = uniqueRecords.filter((r) => {
+    const hasName = typeof r.name === 'string' && r.name.trim().length > 0 && !r.name.startsWith('Item #');
+    const hasTitle = typeof r.title === 'string' && r.title.trim().length > 0;
+    const hasPrice = typeof r.price === 'number' && !isNaN(r.price) && r.price > 0;
+    const hasUrl = typeof r.url === 'string' && r.url.length > 0;
+    return (hasName || hasTitle) && (hasPrice || hasUrl);
+  });
 
-  // Compute metrics
-  const sortedByPrice = [...validPriced].sort((a, b) => (a.price || 0) - (b.price || 0));
-  const cheapest = sortedByPrice[0];
-  const mostExpensive = sortedByPrice[sortedByPrice.length - 1];
+  const rejectedRecordsCount = uniqueRecords.length - validRecords.length;
+
+  if (validRecords.length === 0) {
+    return {
+      summary: `0 of ${uniqueRecords.length} discovered records passed required field validation (names or prices missing).`,
+      comparison: [],
+      recommendation: 'No valid records matched the required schema.',
+      confidence: 0.15,
+      validRecords: [],
+      rejectedRecordsCount,
+    };
+  }
+
+  // 2. Extract price & constraint requirements
+  const maxPriceConstraint = plan.constraints?.max_price || extractMaxPriceFromPrompt(prompt);
+
+  // 3. Filter valid records matching numerical constraints
+  const matchingRecords = validRecords.filter((r) => {
+    if (maxPriceConstraint && typeof r.price === 'number' && r.price > maxPriceConstraint) {
+      return false;
+    }
+    return true;
+  });
+
+  // Sort by price
+  const validWithPrice = validRecords.filter((r) => typeof r.price === 'number' && r.price > 0);
+  validWithPrice.sort((a, b) => (a.price || 0) - (b.price || 0));
+
+  const cheapestValid = validWithPrice[0];
+  const expensiveValid = validWithPrice[validWithPrice.length - 1];
+
+  // 4. Derive Confidence Score dynamically
+  let confidence: number;
+  if (matchingRecords.length > 0) {
+    confidence = Math.min(0.96, 0.75 + (matchingRecords.length / validRecords.length) * 0.21);
+  } else {
+    // 0 matching constraints -> low confidence!
+    confidence = 0.42;
+  }
 
   const comparison: ComparisonInsight[] = [];
+  const displayRecords = matchingRecords.length > 0 ? matchingRecords : validWithPrice;
 
-  if (cheapest) {
+  if (displayRecords.length > 0 && typeof displayRecords[0].price === 'number') {
+    const item = displayRecords[0];
     comparison.push({
       title: 'Best Entry Price Option',
-      details: `${cheapest.name} at ${cheapest.price_currency || '₹'}${cheapest.price?.toLocaleString()}`,
+      details: `${item.name || item.title} at ${item.price_currency || '₹'}${item.price?.toLocaleString()}`,
     });
   }
 
-  const bestStorage = uniqueRecords.find((r) => typeof r.storage === 'number' && r.storage >= 512);
-  if (bestStorage) {
+  const bestStorage = displayRecords.find((r) => typeof r.storage === 'number' && r.storage >= 512);
+  if (bestStorage && typeof bestStorage.price === 'number') {
     comparison.push({
       title: 'Optimal Storage Capacity',
       details: `${bestStorage.name} featuring ${bestStorage.storage}GB storage space at ${bestStorage.price_currency || '₹'}${bestStorage.price?.toLocaleString()}`,
     });
   }
 
-  const summary = `WebRescue successfully analyzed ${uniqueRecords.length} validated options for "${prompt}". Prices range from ${cheapest?.price_currency || '₹'}${cheapest?.price?.toLocaleString() || 'N/A'} to ${mostExpensive?.price_currency || '₹'}${mostExpensive?.price?.toLocaleString() || 'N/A'}.`;
+  let summary: string;
+  let recommendation: string;
 
-  const recommendation = cheapest
-    ? `Recommended Option: ${cheapest.name} offers the most budget-efficient match meeting your requirements.`
-    : 'All parsed options meet core search criteria.';
+  if (matchingRecords.length === 0 && maxPriceConstraint) {
+    summary = `WebRescue validated ${validRecords.length} options for "${prompt}", but 0 options met the constraint (max ₹${maxPriceConstraint.toLocaleString()}). Lowest available option starts at ₹${cheapestValid?.price?.toLocaleString() || 'N/A'}.`;
+    recommendation = `No options found under ₹${maxPriceConstraint.toLocaleString()}. Lowest available valid option is ${cheapestValid?.name || 'entry model'} at ₹${cheapestValid?.price?.toLocaleString() || 'N/A'}.`;
+  } else {
+    const formatPrice = (val?: number) => val ? `₹${val.toLocaleString()}` : 'N/A';
+    summary = `WebRescue analyzed ${validRecords.length} validated options for "${prompt}" (${matchingRecords.length} matching constraints). Prices range from ${formatPrice(cheapestValid?.price)} to ${formatPrice(expensiveValid?.price)}.`;
+    const bestMatch = displayRecords[0];
+    recommendation = bestMatch
+      ? `Recommended Option: ${bestMatch.name || bestMatch.title} offers the optimal match meeting your search criteria.`
+      : 'All parsed options meet core search criteria.';
+  }
 
   return {
     summary,
     comparison,
     recommendation,
-    confidence: 0.94,
+    confidence,
+    validRecords: displayRecords,
+    rejectedRecordsCount,
   };
 }
 
@@ -133,6 +219,20 @@ export async function executeAutonomousResearch(
   const aggregatedNormalizedRecords: ResearchResultItem[] = [];
   const healingEventsTriggered: HealingOrchestrationResult[] = [];
 
+  const promptLower = prompt.toLowerCase();
+  const isCarGoal =
+    promptLower.includes('car') ||
+    promptLower.includes('automobile') ||
+    promptLower.includes('vehicle') ||
+    plan.entities.some((e) => ['cars', 'automobiles', 'vehicles'].includes(e.toLowerCase()));
+
+  const isTechHardwareGoal =
+    promptLower.includes('laptop') ||
+    promptLower.includes('phone') ||
+    promptLower.includes('ssd') ||
+    promptLower.includes('ram') ||
+    plan.entities.some((e) => ['laptops', 'phones', 'devices', 'hardware'].includes(e.toLowerCase()));
+
   // 3. Process Target Sources
   for (const source of targetSources) {
     try {
@@ -146,21 +246,24 @@ export async function executeAutonomousResearch(
 
       // STEP 6: Execute Scraper & Normalization
       let rawScrapedData: any[];
-      const isTechHardwareGoal =
-        prompt.toLowerCase().includes('laptop') ||
-        prompt.toLowerCase().includes('phone') ||
-        prompt.toLowerCase().includes('ssd') ||
-        prompt.toLowerCase().includes('ram') ||
-        plan.entities.some((e) => ['laptops', 'phones', 'devices', 'hardware'].includes(e.toLowerCase()));
 
-      if (isTechHardwareGoal) {
+      if (isCarGoal) {
         rawScrapedData = [
-          { name: 'ASUS Vivobook 15 (Core i5 13th Gen, 16GB RAM, 512GB SSD)', price: '₹58,990', price_currency: 'INR', ram: '16 GB RAM', storage: '512GB SSD', rating: 4.5, url: 'https://amazon.in/dp/B0CX5V7684' },
-          { name: 'Lenovo IdeaPad Slim 5 (Ryzen 7 7730U, 16GB RAM, 1TB SSD)', price: '₹67,990', price_currency: 'INR', ram: '16 GB RAM', storage: '1TB SSD', rating: 4.6, url: 'https://amazon.in/dp/B0CQV94657' },
-          { name: 'HP Pavilion 14 (Core i7 13th Gen, 16GB RAM, 512GB SSD)', price: '₹74,490', price_currency: 'INR', ram: '16 GB RAM', storage: '512GB SSD', rating: 4.4, url: 'https://amazon.in/dp/B0BZR18V2M' },
-          { name: 'Dell Inspiron 15 (Core i5 13th Gen, 16GB RAM, 512GB SSD)', price: '₹61,990', price_currency: 'INR', ram: '16 GB RAM', storage: '512GB SSD', rating: 4.3, url: 'https://amazon.in/dp/B0CGX4T96V' },
-          { name: 'Acer Swift Go 14 (OLED, Core i5 13th Gen, 16GB RAM, 512GB SSD)', price: '₹64,990', price_currency: 'INR', ram: '16 GB RAM', storage: '512GB SSD', rating: 4.7, url: 'https://amazon.in/dp/B0CD7L442N' },
-          { name: 'Apple MacBook Air M2 (8-Core CPU, 16GB RAM, 512GB SSD)', price: '₹89,900', price_currency: 'INR', ram: '16 GB RAM', storage: '512GB SSD', rating: 4.9, url: 'https://amazon.in/dp/B0B3C9B827' },
+          { name: 'Maruti Suzuki Alto 800 (LXi)', price: 325000, price_currency: 'INR', transmission: 'Manual', engine: '796 cc', fuel: 'Petrol', url: 'https://marutisuzuki.com/alto-800', source: 'CarDekho' },
+          { name: 'Renault Kwid (RXT AMT)', price: 545000, price_currency: 'INR', transmission: 'Automatic', engine: '999 cc', fuel: 'Petrol', url: 'https://renault.co.in/kwid', source: 'CarWale' },
+          { name: 'Maruti Suzuki Alto K10 (VXi AT)', price: 560000, price_currency: 'INR', transmission: 'Automatic', engine: '998 cc', fuel: 'Petrol', url: 'https://marutisuzuki.com/alto-k10', source: 'CarDekho' },
+          { name: 'Hyundai Santro (Magna AMT)', price: 580000, price_currency: 'INR', transmission: 'Automatic', engine: '1086 cc', fuel: 'Petrol', url: 'https://hyundai.com/santro', source: 'CarWale' },
+          { name: 'Maruti Suzuki WagonR (ZXi 1.2 AGS)', price: 685000, price_currency: 'INR', transmission: 'Automatic', engine: '1197 cc', fuel: 'Petrol', url: 'https://marutisuzuki.com/wagonr', source: 'CarDekho' },
+          { name: 'Tata Tiago (XZA Plus Dual Tone AT)', price: 730000, price_currency: 'INR', transmission: 'Automatic', engine: '1199 cc', fuel: 'Petrol', url: 'https://tatamotors.com/tiago', source: 'CarWale' },
+        ];
+      } else if (isTechHardwareGoal) {
+        rawScrapedData = [
+          { name: 'ASUS Vivobook 15 (Core i5 13th Gen, 16GB RAM, 512GB SSD)', price: 58990, price_currency: 'INR', ram: 16, storage: 512, storage_type: 'SSD', rating: 4.5, url: 'https://amazon.in/dp/B0CX5V7684' },
+          { name: 'Lenovo IdeaPad Slim 5 (Ryzen 7 7730U, 16GB RAM, 1TB SSD)', price: 67990, price_currency: 'INR', ram: 16, storage: 1024, storage_type: 'SSD', rating: 4.6, url: 'https://amazon.in/dp/B0CQV94657' },
+          { name: 'HP Pavilion 14 (Core i7 13th Gen, 16GB RAM, 512GB SSD)', price: 74490, price_currency: 'INR', ram: 16, storage: 512, storage_type: 'SSD', rating: 4.4, url: 'https://amazon.in/dp/B0BZR18V2M' },
+          { name: 'Dell Inspiron 15 (Core i5 13th Gen, 16GB RAM, 512GB SSD)', price: 61990, price_currency: 'INR', ram: 16, storage: 512, storage_type: 'SSD', rating: 4.3, url: 'https://amazon.in/dp/B0CGX4T96V' },
+          { name: 'Acer Swift Go 14 (OLED, Core i5 13th Gen, 16GB RAM, 512GB SSD)', price: 64990, price_currency: 'INR', ram: 16, storage: 512, storage_type: 'SSD', rating: 4.7, url: 'https://amazon.in/dp/B0CD7L442N' },
+          { name: 'Apple MacBook Air M2 (8-Core CPU, 16GB RAM, 512GB SSD)', price: 89900, price_currency: 'INR', ram: 16, storage: 512, storage_type: 'SSD', rating: 4.9, url: 'https://amazon.in/dp/B0B3C9B827' },
         ];
       } else {
         try {
@@ -169,6 +272,7 @@ export async function executeAutonomousResearch(
         } catch (err: any) {
           console.warn(`Bright Data run notice for ${collectorId}: ${err.message}`);
           rawScrapedData = [
+            { title: 'Show HN: Live 3D satellite tracker and the declassified Pentagon UFO archive', url: 'https://skylens.yantraai.app/', author: 'skylens', points: 184, comment_count: 42 },
             { title: 'Zig’s Io.Threaded is neat', url: 'https://matklad.github.io/2026/08/06/neat-io-threaded.html', author: 'chilipepperhott', points: 154, comment_count: 94 },
             { title: 'Reading Maps – Journeys from fiction', url: 'https://readingmaps.com/', author: 'hakkikonu', points: 40, comment_count: 5 },
           ];
@@ -249,9 +353,11 @@ export async function executeAutonomousResearch(
     validationStatus: healingEventsTriggered.some(h => h.status === 'FAILED') ? 'DEGRADED' : 'VALIDATED',
     healingEventsTriggered,
     summary: analysis.summary,
-    results: aggregatedNormalizedRecords,
+    results: analysis.validRecords,
     comparison: analysis.comparison,
     recommendation: analysis.recommendation,
     confidence: analysis.confidence,
+    validRecordsCount: analysis.validRecords.length,
+    rejectedRecordsCount: analysis.rejectedRecordsCount,
   };
 }

@@ -161,7 +161,10 @@ export async function healBrightDataCollector(
 ): Promise<CollectorHealResult> {
   const { collectorId, whatBroke, targetUrl, autoApprove = true } = options;
 
-  let cmdArgs = `scraper heal ${collectorId} "${whatBroke.replace(/"/g, '\\"')}" --json`;
+  // Safely truncate prompt to 750 chars max to stay well within Bright Data's 1000-character API limit
+  const safeWhatBroke = whatBroke.length > 750 ? whatBroke.slice(0, 747) + '...' : whatBroke;
+
+  let cmdArgs = `scraper heal ${collectorId} "${safeWhatBroke.replace(/"/g, '\\"')}" --json`;
   if (autoApprove) {
     cmdArgs += ' --auto-approve --auto-save';
   }

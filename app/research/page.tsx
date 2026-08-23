@@ -177,26 +177,67 @@ export default function ResearchPage() {
 
           {/* Extracted Options Results Table */}
           <div className="space-y-3">
-            <h3 className="text-sm font-bold text-slate-200">Best Validated Options Found ({agentOutput.results.length})</h3>
-            <div className="grid grid-cols-1 gap-3">
-              {agentOutput.results.map((item: any, idx: number) => (
-                <div key={idx} className="glass-card p-4 rounded-xl flex items-center justify-between border-slate-800">
-                  <div className="space-y-1">
-                    <span className="text-sm font-bold text-slate-100">{idx + 1}. {item.name}</span>
-                    <div className="flex items-center gap-3 text-xs text-slate-400 font-mono">
-                      {item.ram && <span>RAM: {item.ram}GB</span>}
-                      {item.storage && <span>Storage: {item.storage}GB</span>}
-                      {item.rating && <span>Rating: ⭐ {item.rating}</span>}
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-slate-200">
+                Best Validated Options Found ({agentOutput.results.length})
+              </h3>
+              {typeof agentOutput.rejectedRecordsCount === 'number' && agentOutput.rejectedRecordsCount > 0 && (
+                <span className="text-xs font-mono text-rose-400 bg-rose-950/40 px-2 py-0.5 rounded border border-rose-500/20">
+                  {agentOutput.rejectedRecordsCount} invalid records rejected
+                </span>
+              )}
+            </div>
+
+            {agentOutput.results.length === 0 ? (
+              <div className="p-8 text-center glass-card rounded-xl border border-slate-800 space-y-2">
+                <div className="text-amber-400 text-sm font-bold flex items-center justify-center gap-2">
+                  <span>⚠️</span> No Validated Results Found Matching Search Criteria
+                </div>
+                <p className="text-slate-400 text-xs max-w-lg mx-auto">
+                  {agentOutput.summary}
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3">
+                {agentOutput.results.map((item: any, idx: number) => (
+                  <div key={idx} className="glass-card p-4 rounded-xl flex items-center justify-between border-slate-800">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-slate-100">{idx + 1}. {item.name || item.title}</span>
+                        {item.url && (
+                          <a
+                            href={item.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-blue-400 hover:underline font-mono"
+                          >
+                            🔗 Source
+                          </a>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 font-mono">
+                        {item.transmission && <span className="bg-slate-800 px-2 py-0.5 rounded text-amber-300">⚙️ {item.transmission}</span>}
+                        {item.fuel && <span>⛽ {item.fuel}</span>}
+                        {item.ram && <span>RAM: {item.ram}GB</span>}
+                        {item.storage && <span>Storage: {item.storage}GB</span>}
+                        {item.author && <span>Author: @{item.author}</span>}
+                        {item.points && <span className="text-emerald-400 font-bold">▲ {item.points} pts</span>}
+                        {item.rating && <span>⭐ {item.rating}</span>}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      {typeof item.price === 'number' && item.price > 0 ? (
+                        <span className="text-lg font-extrabold text-emerald-400 font-mono">
+                          {item.price_currency || '₹'}{item.price.toLocaleString()}
+                        </span>
+                      ) : (
+                        <span className="text-xs font-mono text-slate-400">Validated</span>
+                      )}
                     </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-lg font-extrabold text-emerald-400 font-mono">
-                      {item.price_currency || '₹'}{typeof item.price === 'number' ? item.price.toLocaleString() : item.price}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Key Insights & Best Value Recommendation */}
@@ -204,12 +245,16 @@ export default function ResearchPage() {
             <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2">
               <h3 className="text-xs font-bold uppercase tracking-wider text-amber-400">Comparison Highlights</h3>
               <div className="space-y-2">
-                {agentOutput.comparison.map((c: any, idx: number) => (
-                  <div key={idx} className="text-xs space-y-0.5">
-                    <strong className="text-slate-300">{c.title}:</strong>
-                    <p className="text-slate-400">{c.details}</p>
-                  </div>
-                ))}
+                {agentOutput.comparison && agentOutput.comparison.length > 0 ? (
+                  agentOutput.comparison.map((c: any, idx: number) => (
+                    <div key={idx} className="text-xs space-y-0.5">
+                      <strong className="text-slate-300">{c.title}:</strong>
+                      <p className="text-slate-400">{c.details}</p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-slate-500 italic">No price comparisons available</p>
+                )}
               </div>
             </div>
 
@@ -219,15 +264,36 @@ export default function ResearchPage() {
             </div>
           </div>
 
-          {/* Self-Healing Trigger Callout Banner */}
+          {/* Self-Healing Callout Banner */}
           {agentOutput.healingEventsTriggered && agentOutput.healingEventsTriggered.length > 0 && (
-            <div className="p-4 rounded-xl bg-amber-950/30 border border-amber-500/30 text-xs space-y-1">
-              <span className="font-bold text-amber-400">🔥 Autonomous Self-Healing Triggered:</span>
-              {agentOutput.healingEventsTriggered.map((h: any, idx: number) => (
-                <p key={idx} className="font-mono text-amber-200">
-                  Collector {h.collectorId}: {h.details} (Status: {h.status})
-                </p>
-              ))}
+            <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-2">
+              {agentOutput.healingEventsTriggered.map((h: any, idx: number) => {
+                const isRecovered = h.status === 'RECOVERED' || h.status === 'HEALED';
+                const isUnavailable = h.status === 'HEALING_UNAVAILABLE';
+                return (
+                  <div
+                    key={idx}
+                    className={`p-3 rounded-lg border font-mono ${
+                      isRecovered
+                        ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-300'
+                        : isUnavailable
+                        ? 'bg-amber-950/30 border-amber-500/30 text-amber-300'
+                        : 'bg-rose-950/30 border-rose-500/30 text-rose-300'
+                    }`}
+                  >
+                    <div className="font-bold">
+                      {isRecovered
+                        ? '🔥 🟢 Self-Healing Succeeded (RECOVERED)'
+                        : isUnavailable
+                        ? '⚠️ Self-Healing Requested (Status: HEALING_UNAVAILABLE)'
+                        : `🚨 Self-Healing Event (Status: ${h.status})`}
+                    </div>
+                    <p className="text-slate-300 mt-1">
+                      Collector {h.collectorId}: {h.details}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
