@@ -1,0 +1,63 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ResearchGoal {
+  id          String       @id @default(uuid())
+  goal        String
+  entities    String       // JSON string array
+  fields      String       // JSON string array
+  constraints String       // JSON string object
+  status      String       @default("PENDING") // PENDING, ACTIVE, COMPLETED, FAILED
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  runs        ScraperRun[]
+}
+
+model Collector {
+  id            String         @id @default(uuid())
+  collectorId   String         @unique // Bright Data collector ID (e.g. c_12345)
+  name          String
+  url           String
+  fields        String         // JSON string of targeted fields
+  status        String         @default("ACTIVE") // ACTIVE, DEGRADED, REPAIRED, FAILED
+  healthScore   Int            @default(100) // Health score 0-100
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  runs          ScraperRun[]
+  healingEvents HealingEvent[]
+}
+
+model ScraperRun {
+  id             String        @id @default(uuid())
+  researchGoalId String?
+  collectorId    String
+  status         String        @default("SUCCESS") // SUCCESS, VALIDATION_FAILED, HEALING_IN_PROGRESS, ERROR
+  rawData        String?       // Raw JSON output string
+  normalizedData String?       // Cleaned JSON output string
+  validationLogs String?       // Validation results JSON
+  createdAt      DateTime      @default(now())
+  researchGoal   ResearchGoal? @relation(fields: [researchGoalId], references: [id], onDelete: SetNull)
+  collector      Collector     @relation(fields: [collectorId], references: [collectorId], onDelete: Cascade)
+}
+
+model HealingEvent {
+  id                String    @id @default(uuid())
+  collectorId       String
+  triggerReason     String
+  whatBroke         String
+  aiDiagnosis       String?   // Structured AI diagnosis & repair strategy JSON
+  healthScoreBefore Int?      // Score before healing (e.g. 31)
+  healthScoreAfter  Int?      // Score after healing (e.g. 94)
+  healingMode       String    @default("AUTOMATIC") // AUTOMATIC, APPROVAL_REQUIRED
+  status            String    @default("IN_PROGRESS") // IN_PROGRESS, HEALED, RECOVERED, FAILED, ESCALATED, PENDING_APPROVAL
+  resolution        String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  collector         Collector @relation(fields: [collectorId], references: [collectorId], onDelete: Cascade)
+}

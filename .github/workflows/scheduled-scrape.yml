@@ -1,0 +1,38 @@
+name: WebRescue Scheduled CI Scraping & Self-Healing Workflow
+
+on:
+  schedule:
+    - cron: '0 */6 * * *' # Scheduled every 6 hours
+  workflow_dispatch:
+
+jobs:
+  scrape-validate-heal:
+    name: Run Scrapers & Execute Self-Healing Engine
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout WebRescue Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Project Dependencies
+        run: npm ci
+
+      - name: Synchronize Prisma SQLite Database
+        run: npx prisma db push
+
+      - name: Run Full Pipeline Integration & Validation Suite
+        env:
+          BRIGHTDATA_API_KEY: ${{ secrets.BRIGHTDATA_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          echo "🕷️ WebRescue CI Scheduled Workflow Executing..."
+          npx tsx scripts/test-full-pipeline.ts
+
+      - name: Verify WebRescue Production Next.js Build
+        run: npm run build
