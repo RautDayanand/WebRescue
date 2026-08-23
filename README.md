@@ -7,7 +7,7 @@
 ## 📽️ Demo Video & Project Pitch
 
 - 🎬 **Demo Video Link**: [Watch 4-Minute WebRescue Video Demo on YouTube / Loom](https://youtube.com/watch?v=YOUR_DEMO_VIDEO_LINK_HERE) *(Replace with your video link)*
-- 🔗 **GitHub Repository**: [https://github.com/YOUR_USERNAME/WebRescue](https://github.com/YOUR_USERNAME/WebRescue)
+- 🔗 **GitHub Repository**: [https://github.com/Dayanand-003/WebRescue](https://github.com/Dayanand-003/WebRescue)
 - 🏆 **Hackathon Tracks**: Best Use of Bright Data (Web-Slinger) & Best AI Scraper Automation
 
 ---
@@ -178,7 +178,7 @@ WebRescue/
 
 ### 1. Clone & Install Dependencies
 ```bash
-git clone https://github.com/YOUR_USERNAME/WebRescue.git
+git clone https://github.com/Dayanand-003/WebRescue.git
 cd WebRescue
 npm install
 ```
