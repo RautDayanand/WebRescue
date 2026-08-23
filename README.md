@@ -8,7 +8,7 @@
 
 - 🎬 **Demo Video Link**: [Watch 4-Minute WebRescue Video Demo on YouTube / Loom](https://youtube.com/watch?v=YOUR_DEMO_VIDEO_LINK_HERE) *(Replace with your video link)*
 - 🔗 **GitHub Repository**: [https://github.com/RautDayanand/WebRescue](https://github.com/RautDayanand/WebRescue)
-- 🏆 **Hackathon Tracks**: Best Use of Bright Data (Web-Slinger) & Best AI Scraper Automation
+- 🏆 **Hackathon Track**: Web-Slinger — Best Use of Bright Data (Scraper Studio & In-Place Self-Healing)
 
 ---
 
@@ -191,8 +191,9 @@ cp .env.example .env
 Confirm `.env` settings:
 ```env
 DATABASE_URL="file:./dev.db"
-BRIGHTDATA_DEFAULT_COLLECTOR_ID="c_mt5uny9822ng9wnh"
+BRIGHTDATA_DEFAULT_COLLECTOR_ID="<your-collector-id>" # e.g. "c_mt5uny9822ng9wnh" (Demonstrated Production Collector)
 ```
+*(Note: WebRescue will dynamically generate a new Bright Data Scraper Studio Collector on first run if no default ID is provided.)*
 
 ### 3. Initialize SQLite Database
 ```bash
