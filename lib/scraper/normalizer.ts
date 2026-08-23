@@ -42,7 +42,7 @@ export function normalizeFieldValue(key: string, value: any): { value: any; extr
   }
 
   // 2. RAM Memory Handling (e.g. "16 GB RAM", "8GB")
-  if (lowerKey.includes('ram') || lowerKey.includes('memory') || lowerVal.includes('ram')) {
+  if (lowerKey !== 'name' && lowerKey !== 'title' && (lowerKey.includes('ram') || lowerKey.includes('memory') || lowerVal.includes('ram'))) {
     const ramMatch = strVal.match(/(\d+)\s*(?:gb|mb)/i);
     if (ramMatch) {
       const num = parseInt(ramMatch[1], 10);
@@ -51,7 +51,7 @@ export function normalizeFieldValue(key: string, value: any): { value: any; extr
   }
 
   // 3. Storage Handling (e.g. "512GB SSD", "1TB Storage")
-  if (lowerKey.includes('storage') || lowerKey.includes('drive') || lowerVal.includes('ssd') || lowerVal.includes('hdd')) {
+  if (lowerKey !== 'name' && lowerKey !== 'title' && (lowerKey.includes('storage') || lowerKey.includes('drive') || lowerVal.includes('ssd') || lowerVal.includes('hdd'))) {
     const storageMatch = strVal.match(/(\d+)\s*(gb|tb)/i);
     if (storageMatch) {
       const unit = storageMatch[2].toLowerCase();
@@ -113,17 +113,8 @@ export function normalizeScrapedData(rawData: any): NormalizedRecord[] {
     }
 
     // Ensure name field is populated from title/product_name fallbacks
-    if (!normalized.name) {
-      normalized.name = record.name || record.title || record.heading || record.product_name || `Item #${idx + 1}`;
-    }
-
-    // Ensure price field is populated for UI rendering
-    if (!normalized.price && typeof record.points === 'number') {
-      normalized.price = Math.min(record.points * 650, 79999);
-      normalized.price_currency = 'INR';
-    } else if (!normalized.price) {
-      normalized.price = 45000 + ((idx * 2700) % 34000);
-      normalized.price_currency = 'INR';
+    if (!normalized.name && !normalized.title) {
+      normalized.name = record.name || record.product_name || `Item #${idx + 1}`;
     }
 
     return normalized;
