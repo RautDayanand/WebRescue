@@ -193,7 +193,7 @@ export async function orchestrateSelfHealing(
 
   // 4. RE-RUNNING Collector
   try {
-    const runResult = await runBrightDataCollector(collectorId, targetUrl, { sync: true });
+    const runResult = await runBrightDataCollector(collectorId, targetUrl, { sync: false });
     const normalized = normalizeScrapedData(runResult.data);
 
     // 5. VALIDATING Recovered Dataset

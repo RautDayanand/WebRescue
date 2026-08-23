@@ -9,7 +9,7 @@ import { executeAutonomousResearch } from '@/lib/ai/agent';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { prompt, maxSourcesToProcess = 2 } = body;
+    const { prompt, maxSourcesToProcess = 1 } = body;
 
     if (!prompt || typeof prompt !== 'string' || prompt.trim().length === 0) {
       return NextResponse.json(

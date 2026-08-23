@@ -117,7 +117,7 @@ export async function analyzeValidatedDataset(
 export async function executeAutonomousResearch(
   input: AutonomousAgentInput
 ): Promise<AutonomousAgentOutput> {
-  const { prompt, maxSourcesToProcess = 2 } = input;
+  const { prompt, maxSourcesToProcess = 1 } = input;
 
   // 1. STEP 3: AI Goal Planner
   const plan = await planResearchGoal(prompt);
@@ -146,7 +146,7 @@ export async function executeAutonomousResearch(
       // STEP 6: Execute Scraper & Normalization
       let runResult;
       try {
-        runResult = await runBrightDataCollector(collectorId, source.url, { sync: true });
+        runResult = await runBrightDataCollector(collectorId, source.url, { sync: false });
         aggregatedRawData.push(...(Array.isArray(runResult.data) ? runResult.data : [runResult.data]));
       } catch (err: any) {
         console.warn(`Bright Data run notice for ${collectorId}: ${err.message}`);
