@@ -216,6 +216,8 @@ export default function ResearchPage() {
                         )}
                       </div>
                       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 font-mono">
+                        {item.engine && <span className="bg-slate-800 px-2 py-0.5 rounded text-blue-300 font-semibold">🏍️ {item.engine}</span>}
+                        {item.mileage && <span className="text-emerald-300 font-semibold">⚡ {item.mileage}</span>}
                         {item.transmission && <span className="bg-slate-800 px-2 py-0.5 rounded text-amber-300">⚙️ {item.transmission}</span>}
                         {item.fuel && <span>⛽ {item.fuel}</span>}
                         {item.ram && <span>RAM: {item.ram}GB</span>}

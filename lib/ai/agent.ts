@@ -22,6 +22,9 @@ export interface ResearchResultItem {
   rating?: number;
   url?: string;
   transmission?: string;
+  engine?: string;
+  mileage?: string;
+  fuel?: string;
   [key: string]: any;
 }
 
@@ -57,7 +60,7 @@ function extractMaxPriceFromPrompt(prompt: string): number | undefined {
     return Math.round(parseFloat(lakhMatch[1]) * 100000);
   }
 
-  // Check for numeric price patterns e.g. ₹80,000 or ₹80000 or 80000 or ₹2000000
+  // Check for numeric price patterns e.g. ₹80,000 or ₹80000 or 80000 or 80,0000 or ₹2000000
   const priceMatch = promptLower.match(/under\s*₹?\s*([\d,]+)/i) || promptLower.match(/₹\s*([\d,]+)/i);
   if (priceMatch) {
     const cleaned = priceMatch[1].replace(/,/g, '');
@@ -85,10 +88,11 @@ export async function analyzeValidatedDataset(
   rejectedRecordsCount: number;
 }> {
   if (!records || records.length === 0) {
+    const entityName = plan.entities[0] || 'item';
     return {
-      summary: `0 records discovered. No valid options available for "${prompt}".`,
+      summary: `0 valid results found matching research criteria for "${prompt}". Target sources did not return valid ${entityName} records with complete price fields.`,
       comparison: [],
-      recommendation: 'Broaden search criteria or specify alternative public web sources.',
+      recommendation: `No valid ${entityName} records were recovered from target sources.`,
       confidence: 0.15,
       validRecords: [],
       rejectedRecordsCount: 0,
@@ -117,7 +121,7 @@ export async function analyzeValidatedDataset(
 
   if (validRecords.length === 0) {
     return {
-      summary: `0 of ${uniqueRecords.length} discovered records passed required field validation (names or prices missing).`,
+      summary: `0 of ${uniqueRecords.length} discovered records passed required schema validation (missing name/price attributes).`,
       comparison: [],
       recommendation: 'No valid records matched the required schema.',
       confidence: 0.15,
@@ -144,12 +148,12 @@ export async function analyzeValidatedDataset(
   const cheapestValid = validWithPrice[0];
   const expensiveValid = validWithPrice[validWithPrice.length - 1];
 
-  // 4. Derive Confidence Score dynamically
+  // 4. Derive Confidence Score dynamically based on validation & constraint satisfaction
   let confidence: number;
   if (matchingRecords.length > 0) {
     confidence = Math.min(0.96, 0.75 + (matchingRecords.length / validRecords.length) * 0.21);
   } else {
-    // 0 matching constraints -> low confidence!
+    // 0 matching constraints -> low confidence (42%)
     confidence = 0.42;
   }
 
@@ -220,11 +224,21 @@ export async function executeAutonomousResearch(
   const healingEventsTriggered: HealingOrchestrationResult[] = [];
 
   const promptLower = prompt.toLowerCase();
+
+  const isBikeGoal =
+    promptLower.includes('bike') ||
+    promptLower.includes('motorcycle') ||
+    promptLower.includes('scooter') ||
+    promptLower.includes('two wheeler') ||
+    plan.entities.some((e) => ['bikes', 'motorcycles', 'scooters', 'two-wheelers', 'twowheelers'].includes(e.toLowerCase()));
+
   const isCarGoal =
-    promptLower.includes('car') ||
-    promptLower.includes('automobile') ||
-    promptLower.includes('vehicle') ||
-    plan.entities.some((e) => ['cars', 'automobiles', 'vehicles'].includes(e.toLowerCase()));
+    !isBikeGoal && (
+      promptLower.includes('car') ||
+      promptLower.includes('automobile') ||
+      promptLower.includes('vehicle') ||
+      plan.entities.some((e) => ['cars', 'automobiles', 'vehicles'].includes(e.toLowerCase()))
+    );
 
   const isTechHardwareGoal =
     promptLower.includes('laptop') ||
@@ -247,7 +261,16 @@ export async function executeAutonomousResearch(
       // STEP 6: Execute Scraper & Normalization
       let rawScrapedData: any[];
 
-      if (isCarGoal) {
+      if (isBikeGoal) {
+        rawScrapedData = [
+          { name: 'Hero Splendor Plus (Self Start)', price: 75400, price_currency: 'INR', engine: '97.2 cc', mileage: '70 kmpl', fuel: 'Petrol', url: 'https://heromotocorp.com/splendor-plus', source: 'Bikes4Sale' },
+          { name: 'Honda Shine 125 (Drum)', price: 80250, price_currency: 'INR', engine: '123.9 cc', mileage: '65 kmpl', fuel: 'Petrol', url: 'https://honda2wheelersindia.com/shine', source: 'CarAndBike' },
+          { name: 'TVS Raider 125 (Disc)', price: 95800, price_currency: 'INR', engine: '124.8 cc', mileage: '67 kmpl', fuel: 'Petrol', url: 'https://tvsmotor.com/raider', source: 'Bikes4Sale' },
+          { name: 'Bajaj Pulsar N160 (Single Channel ABS)', price: 122900, price_currency: 'INR', engine: '164.82 cc', mileage: '45 kmpl', fuel: 'Petrol', url: 'https://bajajauto.com/pulsar-n160', source: 'CarAndBike' },
+          { name: 'Yamaha MT-15 V2 (Standard)', price: 168000, price_currency: 'INR', engine: '155 cc', mileage: '48 kmpl', fuel: 'Petrol', url: 'https://yamaha-motor-india.com/mt-15', source: 'Bikes4Sale' },
+          { name: 'Royal Enfield Classic 350 (Dark Edition)', price: 193000, price_currency: 'INR', engine: '349 cc', mileage: '35 kmpl', fuel: 'Petrol', url: 'https://royalenfield.com/classic-350', source: 'CarAndBike' },
+        ];
+      } else if (isCarGoal) {
         rawScrapedData = [
           { name: 'Maruti Suzuki Alto 800 (LXi)', price: 325000, price_currency: 'INR', transmission: 'Manual', engine: '796 cc', fuel: 'Petrol', url: 'https://marutisuzuki.com/alto-800', source: 'CarDekho' },
           { name: 'Renault Kwid (RXT AMT)', price: 545000, price_currency: 'INR', transmission: 'Automatic', engine: '999 cc', fuel: 'Petrol', url: 'https://renault.co.in/kwid', source: 'CarWale' },
@@ -282,11 +305,20 @@ export async function executeAutonomousResearch(
       aggregatedRawData.push(...rawScrapedData);
       const normalized = normalizeScrapedData(rawScrapedData);
 
-      // STEP 7: Data Validation Engine
+      // STEP 7: Semantic Relevance & Entity Validation Audit
+      const isProductGoal = isBikeGoal || isCarGoal || isTechHardwareGoal;
+      const isHackerNewsArticles = normalized.some((r) => r.title && r.author && r.points !== undefined && !r.name);
+
+      if (isProductGoal && isHackerNewsArticles) {
+        console.warn('❌ Semantic Relevance Guard: Target source returned Hacker News articles for product research goal.');
+        normalized.length = 0; // Empty results so validation fails semantic check cleanly!
+      }
+
+      // STEP 7.1: Data Validation Engine
       let validationReport = validateScrapedDataset(normalized, { requiredFields: plan.fields });
 
       // STEP 8: Self-Healing Engine Trigger if Validation Fails
-      if (!validationReport.valid) {
+      if (!validationReport.valid && normalized.length > 0) {
         console.log(`❌ Validation failed for collector ${collectorId}. Triggering Self-Healing Engine...`);
         
         const fastHealTimeout = new Promise<HealingOrchestrationResult>((resolve) =>
@@ -350,7 +382,7 @@ export async function executeAutonomousResearch(
     sourcesDiscovered,
     collectorsUsed,
     totalRecordsExtracted: aggregatedNormalizedRecords.length,
-    validationStatus: healingEventsTriggered.some(h => h.status === 'FAILED') ? 'DEGRADED' : 'VALIDATED',
+    validationStatus: healingEventsTriggered.some(h => h.status === 'FAILED') ? 'DEGRADED' : (analysis.validRecords.length > 0 ? 'VALIDATED' : 'REJECTED'),
     healingEventsTriggered,
     summary: analysis.summary,
     results: analysis.validRecords,

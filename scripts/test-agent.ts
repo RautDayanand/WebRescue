@@ -20,9 +20,11 @@ async function main() {
   console.log('🤖 WebRescue — Comprehensive Research Agent Test');
   console.log('----------------------------------------------------');
 
-  await testQuery('Find car under ₹80,000', 1);
-  await testQuery('Find laptops under ₹80,000 with 16GB RAM and 512GB SSD.', 2);
-  await testQuery('Find top technology stories on Hacker News.', 3);
+  await testQuery('Find bike under 80,0000', 1);
+  await testQuery('Find bikes under ₹80,000', 2);
+  await testQuery('Find car under ₹80,000', 3);
+  await testQuery('Find laptops under ₹80,000 with 16GB RAM and 512GB SSD.', 4);
+  await testQuery('Find top technology stories on Hacker News.', 5);
 
   console.log('\n----------------------------------------------------');
   console.log('📊 Verification Summary');
